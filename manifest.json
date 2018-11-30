@@ -5,9 +5,13 @@
   "title": "FTB question",
   "description": "",
   "publishedDate": "",
-  "languages": ["English"],
+  "languages": [
+    "English"
+  ],
   "categories": [],
-  "keywords": ["ftbplugin"],
+  "keywords": [
+    "ftbplugin"
+  ],
   "targets": [
     {
       "id": "org.ekstep.questionset",
@@ -25,6 +29,14 @@
       {
         "type": "css",
         "src": "editor/styles/style.css"
+      },
+      {
+        "type": "js",
+        "src": "editor/controllers/jsTag.min.js"
+      },
+      {
+        "type": "css",
+        "src": "editor/styles/jsTag.css"
       }
     ]
   },
@@ -56,9 +68,9 @@
         "src": "renderer/ftbcontroller.js"
       },
       {
-        "id":"org.ekstep.questionunit.ftb.audioblue",
-        "type":"image",
-        "src":"/renderer/assets/audio-blue.png",
+        "id": "org.ekstep.questionunit.ftb.audioblue",
+        "type": "image",
+        "src": "/renderer/assets/audio-blue.png",
         "assetId": "org.ekstep.questionunit.ftb.audioblue"
       }
     ]

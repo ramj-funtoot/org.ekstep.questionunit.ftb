@@ -3,7 +3,7 @@
  * @class org.ekstep.questionunitmcq:mcqQuestionFormController
  * Jagadish P<jagadish.pujari@tarento.com>
  */
-angular.module('ftbApp', ['org.ekstep.question']).controller('ftbQuestionFormController', ['$scope', '$rootScope', 'questionServices', function($scope, $rootScope, questionServices) { // eslint-disable-line no-unused-vars
+angular.module('ftbApp', ['org.ekstep.question', 'jsTag']).controller('ftbQuestionFormController', ['$scope', '$rootScope', 'questionServices', 'JSTagsCollection', '$timeout', function ($scope, $rootScope, questionServices, JSTagsCollection, $timeout) { // eslint-disable-line no-unused-vars
   var questionInput;
   $scope.keyboardConfig = {
     keyboardType: 'Device',
@@ -31,12 +31,22 @@ angular.module('ftbApp', ['org.ekstep.question']).controller('ftbQuestionFormCon
     media: []
   };
   questionInput = CKEDITOR.replace('ftbQuestion', { // eslint-disable-line no-undef
+    extraPlugins: 'notification,font,justify,colorbutton,mathtext,wordcount,pastefromword,clipboard,ftbblank',
+    extraAllowedContent: 'div span',
     customConfig: ecEditor.resolvePluginResource('org.ekstep.questionunit', '1.0', "editor/ckeditor-config.js"),
     skin: 'moono-lisa,' + CKEDITOR.basePath + "skins/moono-lisa/", // eslint-disable-line no-undef
     contentsCss: CKEDITOR.basePath + "contents.css" // eslint-disable-line no-undef
   });
   questionInput.on('change', function () {
     $scope.ftbFormData.question.text = this.getData();
+    if (isMigrationNeeded($scope.ftbFormData.question.text)) {
+      $timeout(function () {
+        $scope.ftbFormData.question.text = migrateQuestion($scope.ftbFormData.question.text);
+        questionInput.setData($scope.ftbFormData.question.text);
+        $scope.$safeApply();
+      }, 1000);
+    }
+    $scope.$safeApply();
   });
   questionInput.on('focus', function () {
     $scope.generateTelemetry({
@@ -102,6 +112,34 @@ angular.module('ftbApp', ['org.ekstep.question']).controller('ftbQuestionFormCon
       $scope.ftbFormData.media.push(obj);
     })
   }
+
+  var isMigrationNeeded = function (question) {
+    return (/\[\[.*?\]\]/g.test(question));
+  }
+
+  var migrateQuestion = function (question) {
+    if (/\[\[.*?\]\]/g.test(question)) {
+      $scope.ftbFormData.data = $scope.ftbFormData.data || {};
+      $scope.ftbFormData.data.blanks = $scope.ftbFormData.data.blanks || {};
+      $scope.blankAnswers = $scope.blankAnswers || {};
+      var index = _.max(_.map(getFtbBlanks(question), function (b, i) {
+        return parseInt(b.innerText || b.textContent);
+      })) || 0;
+      question = question.replace(/\[\[(.*?)\]\]/g, function (a, b) { // eslint-disable-line no-unused-vars
+        var id = "b" + index;
+        $scope.ftbFormData.data.blanks[id] = $scope.ftbFormData.data.blanks[id] || {
+          "id": id,
+          "seq": "" + (index + 1),
+          answers: [b]
+        }
+        $scope.blankAnswers[id] = $scope.blankAnswers[id] || angular.extend({}, {
+          "tags": new JSTagsCollection([b])
+        }, $scope.jsTagOptions);
+        return '<span class="ftb-blank" contenteditable="false" id="' + id + '">' + (index + 1) + '</span>'
+      });
+    }
+    return question;
+  }
   /**
    * for edit flow
    * @memberof org.ekstep.questionunit.ftb.horizontal_controller
@@ -115,6 +153,7 @@ angular.module('ftbApp', ['org.ekstep.question']).controller('ftbQuestionFormCon
     _.each(qdata.media, function (mediaObject, index) {
       $scope.questionMedia[mediaObject.type] = mediaObject;
     });
+    $scope.ftbFormData.question.text = migrateQuestion($scope.ftbFormData.question.text);
     $scope.$safeApply();
   }
   /**
@@ -127,11 +166,18 @@ angular.module('ftbApp', ['org.ekstep.question']).controller('ftbQuestionFormCon
       a = $scope.extractHTML(a);
       return a.toLowerCase().trim();
     });
+    if ($scope.ftbFormData.data && $scope.ftbFormData.data.blanks) {
+      _.each($scope.ftbFormData.data.blanks, function (v, k) {
+        v.answers = _.map($scope.blankAnswers[k].tags.tags, function (t) {
+          return t.value;
+        });
+      });
+    }
   }
 
-  $scope.extractHTML = function(htmlElement) {
-    var divElement= document.createElement('div');
-    divElement.innerHTML= htmlElement;
+  $scope.extractHTML = function (htmlElement) {
+    var divElement = document.createElement('div');
+    divElement.innerHTML = htmlElement;
     return divElement.textContent || divElement.innerText;
   }
   /**
@@ -159,13 +205,14 @@ angular.module('ftbApp', ['org.ekstep.question']).controller('ftbQuestionFormCon
     var ftbFormQuestionText, formValid, formConfig = {};
     $scope.submitted = true;
     ftbFormQuestionText = $scope.ftbFormData.question.text;
-    formValid = (ftbFormQuestionText.length > 0) && /\[\[.*?\]\]/g.test(ftbFormQuestionText);
+    formValid = (ftbFormQuestionText.length > 0)
+      && (/\[\[.*?\]\]/g.test(ftbFormQuestionText) || getFtbBlanks(ftbFormQuestionText).length > 0);
 
     $scope.ftbFormData.media = [];
     $scope.addAllMedia();
     _.isEmpty($scope.ftbFormData.question.image) ? 0 : $scope.ftbFormData.media.push($scope.questionMedia.image);
     _.isEmpty($scope.ftbFormData.question.audio) ? 0 : $scope.ftbFormData.media.push($scope.questionMedia.audio);
-    
+
     if (formValid) {
       $scope.createAnswerArray();
       formConfig.isValid = true;
@@ -219,7 +266,7 @@ angular.module('ftbApp', ['org.ekstep.question']).controller('ftbQuestionFormCon
       $scope.ftbFormData.question[mediaType] = org.ekstep.contenteditor.mediaManager.getMediaOriginURL(data.assetMedia.src);
       data.assetMedia.type == 'audio' ? $scope.ftbFormData.question.audioName = data.assetMedia.name : '';
       $scope.questionMedia[mediaType] = media;
-      if(!$scope.$$phase) {
+      if (!$scope.$$phase) {
         $scope.$digest()
       }
       $scope.generateTelemetry(telemetryObject)
@@ -249,5 +296,52 @@ angular.module('ftbApp', ['org.ekstep.question']).controller('ftbQuestionFormCon
     qtype: 'ftb'
   }
 
+  var getFtbBlanks = function (html) {
+    var e = $('<div></div>');
+    e.html(html);
+    return $('.ftb-blank', e);
+  }
+
+  $scope.$watch('ftbFormData.question.text', function (n, o) {
+    if (n != undefined) {
+      var blanks = getFtbBlanks(n);
+      if (blanks.length > 0) {
+        $scope.ftbFormData.data = $scope.ftbFormData.data || {};
+        $scope.ftbFormData.data.blanks = $scope.ftbFormData.data.blanks || {};
+        $scope.blankAnswers = $scope.blankAnswers || {};
+        _.each(blanks, function (b, i) {
+          // check and initialize blank obj
+          $scope.ftbFormData.data.blanks[b.id] = $scope.ftbFormData.data.blanks[b.id] || {
+            "id": b.id,
+            "seq": (b.textContent || b.innerText).trim(),
+            answers: []
+          }
+          $scope.blankAnswers[b.id] = $scope.blankAnswers[b.id] || angular.extend({}, {
+            "tags": new JSTagsCollection([])
+          }, $scope.jsTagOptions)
+        });
+      }
+      // if there are any objects that are extra, then remove them
+      if ($scope.ftbFormData.data && $scope.ftbFormData.data.blanks) {
+        var missingBlanks = [];
+        _.each($scope.ftbFormData.data.blanks, function (b, k) {
+          var blankElt = _.find(blanks, function (bElt) {
+            return bElt.id == k;
+          });
+          if (!blankElt)
+            missingBlanks.push(k);
+        })
+        _.each(missingBlanks, function (mb, i) {
+          delete $scope.ftbFormData.data.blanks[mb];
+          delete $scope.blankAnswers[mb];
+        });
+      }
+    }
+  });
+  $scope.jsTagOptions = {
+    "texts": {
+      "inputPlaceHolder": "Type answer here"
+    }
+  };
 }]);
 //# sourceURL=horizontalFTB.js

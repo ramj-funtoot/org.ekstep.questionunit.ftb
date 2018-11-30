@@ -99,20 +99,20 @@ FTBController.keyboardCallback = function (ans) { // eslint-disable-line no-unus
  * @memberof org.ekstep.questionunit.ftb.ftbcontroller
  */
 FTBController.showImageModel = function () {
-    var eventData = event.target.src;
-    var modelTemplate = "<div class='popup image-model-popup' id='image-model-popup' onclick='FTBController.hideImageModel()'><div class='popup-overlay' onclick='FTBController.hideImageModel()'></div> \
+  var eventData = event.target.src;
+  var modelTemplate = "<div class='popup image-model-popup' id='image-model-popup' onclick='FTBController.hideImageModel()'><div class='popup-overlay' onclick='FTBController.hideImageModel()'></div> \
     <div class='popup-full-body'> \
     <div class='font-lato assess-popup assess-goodjob-popup'> \
      <img class='qc-question-fullimage' src=<%= src %> /> \
         <div onclick='FTBController.hideImageModel()' class='qc-popup-close-button'>&times;</div> \
       </div>\
     </div>";
-    var template = _.template(modelTemplate);
-    var templateData = template({
-      src: eventData
-    })
-    $(FTBController.constant.qsFtbElement).append(templateData);
-  },
+  var template = _.template(modelTemplate);
+  var templateData = template({
+    src: eventData
+  })
+  $(FTBController.constant.qsFtbElement).append(templateData);
+},
 
   /**
    * renderer:questionunit.ftb:get currentQuesData.
@@ -138,6 +138,27 @@ FTBController.showImageModel = function () {
         ansFieldConfig: ansFieldConfig
       });
       return ansTemplate;
+    });
+
+    var e = $('<div></div>');
+    e.html(quesData.question.text);
+    var blankElts = $('.ftb-blank', e);
+    _.each(blankElts, function (be, i) {
+      quesData.question.text = quesData.question.text.replace(be.outerHTML, function (a, b) { // eslint-disable-line no-unused-vars
+        index = index + 1;
+        var answers = quesData.data.blanks[$(a)[0].id].answers;
+        template = _.template(FTBController.answerTemplate()); // eslint-disable-line no-undef
+        var ansFieldConfig = {
+          "index": index,
+          "answer": answers[0],
+          "keyboardType": quesData.question.keyboardConfig.keyboardType,
+          "fieldWidth": _.max(_.map(answers, function (a) { return a.length; })) * 15
+        };
+        ansTemplate = template({
+          ansFieldConfig: ansFieldConfig
+        });
+        return ansTemplate;
+      });
     });
     return quesData;
   };
