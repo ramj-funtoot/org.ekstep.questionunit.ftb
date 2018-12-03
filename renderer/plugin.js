@@ -62,47 +62,76 @@ org.ekstep.questionunitFTB.RendererPlugin = org.ekstep.contentrenderer.questionU
   evaluateQuestion: function (event) {
     var telemetryAnsArr = [], //array have all answer
       correctAnswer = false,
-      answerArray = [],
-      ansObj = {};
+      userAnswers = [];
     //check for evalution
     //get all text box value inside the class
+    // get copy of the data 
+    var data = JSON.parse(JSON.stringify(this._question.data.data));
     var textBoxCollection = $(FTBController.constant.qsFtbQuestion).find("input[type=text]"); // eslint-disable-line no-undef
     _.each(textBoxCollection, function (element, index) {
-      answerArray.push(element.value.toLowerCase().trim());
-      var key = "ans" + index; // eslint-disable-line no-unused-vars
-      ansObj = {
-        key: element.value
-      };
+      var userAns = element.value.toLowerCase().trim();
+      userAnswers.push(userAns);
+      data.blanks[element.id].userAnswer = userAns;
+      var ansObj = {}; ansObj["ans" + index] = element.value;
       telemetryAnsArr.push(ansObj);
     });
-    //compare two array
-    /*istanbul ignore else*/
-    if (_.isEqual(answerArray, this._question.data.answer)) { // eslint-disable-line no-undef
-      correctAnswer = true;
+
+    // evaluate the question on this copy
+    // check if there are any groups. If so, handle them separately.
+    if (data.groups && Object.keys(data.groups).length > 0) {
+      _.each(data.groups, function (group, id) {
+        // get all the blanks in this group
+        var blanksInGroup = {};
+        _.each(data.blanks, function (blank, bId) {
+          if (blank.group == id)
+            blanksInGroup[bId] = blank;
+        });
+        var expAnswers = _.map(group.answers, function (ansArray) {
+          return _.map(ansArray, function (a) {
+            return a.trim().toLowerCase().replace(/\s/g, '');
+          });
+        });
+        _.each(blanksInGroup, function (blank, bId) {
+          blank.userAnswer = blank.userAnswer.trim().replace(/\s/g, '');
+          var matchedIndex = _.findIndex(expAnswers, function (expAns) {
+            return _.contains(expAns, blank.userAnswer);
+          })
+          if (matchedIndex != -1) {
+            // there is a match, hence, mark this answer as correct, and also remove the expAns array from expAnswers
+            data.blanks[bId].isCorrect = blank.isCorrect = true;
+            expAnswers.splice(matchedIndex, 1);
+          }
+          else {
+            data.blanks[bId].isCorrect = blank.isCorrect = false;
+          }
+        });
+      });
     }
-    // Calculate partial score
-    var correctAnswersCount = 0;
-    _.each(this._question.data.answer, function (ans, index) { // eslint-disable-line no-undef
-      /*istanbul ignore else*/
-      if (ans.toLowerCase().trim() == answerArray[index].toLowerCase().trim()) {
-        correctAnswersCount++;
-      }
+    // now evaluate ungrouped blanks
+    var ungroupedBlanks = {};
+    _.each(data.blanks, function (blank, id) {
+      if (!blank.group)
+        ungroupedBlanks[id] = blank;
+    });
+    _.each(ungroupedBlanks, function (blank, id) {
+      // trim user answer and remove any embedded white space characters
+      blank.userAnswer = blank.userAnswer.trim().replace(/\s/g, '');
+      var expAnswers = _.map(blank.answers, function (a) {
+        return a.trim().replace(/\s/g, '');
+      });
+      data.blanks[id].isCorrect = blank.isCorrect = _.contains(expAnswers, blank.userAnswer);
     });
 
-    var questionScore;
-    if(this._question.config.partial_scoring){
-      questionScore = (correctAnswersCount / this._question.data.answer.length) * this._question.config.max_score;
-    }else{
-      if((correctAnswersCount / this._question.data.answer.length) == 1){
-        questionScore = this._question.config.max_score;
-      }else{
-        questionScore = 0
-      }
-    }
+    var allBlanks = _.values(data.blanks);
+    correctAnswer = _.every(allBlanks, function (b) { return b.isCorrect; });
+    var correctAnswersCount = _.reduce(allBlanks, function (memo, b) { return memo + (b.isCorrect ? 1 : 0); }, 0);
+
+    var factor = (correctAnswersCount / allBlanks.length);
+    var questionScore = ((this._question.config.partial_scoring) ? factor : Math.floor(factor)) * this._question.config.max_score
     var result = {
       eval: correctAnswer,
       state: {
-        val: answerArray
+        val: userAnswers
       },
       score: questionScore,
       max_score: this._question.config.max_score,
@@ -116,7 +145,7 @@ org.ekstep.questionunitFTB.RendererPlugin = org.ekstep.contentrenderer.questionU
     if (_.isFunction(callback)) {
       callback(result);
     }
-    
+
     QSTelemetryLogger.logEvent(QSTelemetryLogger.EVENT_TYPES.RESPONSE, { "type": "INPUT", "values": telemetryAnsArr }); // eslint-disable-line no-undef
   }
 });

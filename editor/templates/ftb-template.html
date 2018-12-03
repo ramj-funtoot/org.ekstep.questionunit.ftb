@@ -41,30 +41,58 @@
                             </div>
                         </div>
                     </div>
-                    <div class="one column row qHeader">
-                        <span>Enter the answers</span>
-                    </div>
-                    <div class="outer-segment">
-                        <div class="ui segments inner-segment" ng-class="{'cardBorder': $ctrl.focused, 'has-success-card':ftbForm.ftbQuestion.$valid, 'has-errorCard': submitted && (ftbForm.ftbQuestion.question.text.length == 0 || ftbForm.ftbQuestion.$error.pattern)}">
-                            <div class="ui segment">
-                                <table class="ui table">
-                                    <thead>
+                    <div class="ui grid" ng-if="getBlanksCount() > 0">
+                        <div class="two column row qHeader">
+                            <div class="column">Enter expected answers</div>
+                            <div class="column right floated right aligned" ng-if="allowGroups()">
+                                <button class="ui labeled icon button" ng-click="toggleGroupAll()">
+                                    <i ng-class="{'object group outline icon': !ftbFormData.data.groups, 'object ungroup outline icon': ftbFormData.data.groups}"></i>
+                                    {{ftbFormData.data.groups ? 'Ungroup': 'Group'}}
+                                </button>
+                            </div>
+                        </div>
+                        <div class="one column row" ng-if="getGroupsCount() > 0">
+                            <div class="column">
+                                <table class="ui table" ng-repeat="(id, group) in ftbFormData.data.groups">
+                                    <thead class="full-width">
                                         <tr>
-                                            <th class="one wide"></th>
-                                            <th class="one wide"></th>
-                                            <th class="fourteen wide"></th>
+                                            <th>
+                                                Group {{id}}
+                                                <span class="ui blue label" ng-repeat="blank in getBlanksInGroup(id)">{{blank.seq}}</span>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr ng-repeat="blank in ftbFormData.data.blanks">
-                                            <td class="collapsing">
-                                                <div class="ui fitted checkbox">
-                                                    <input type="checkbox" ng-model="blank._grouped"> <label></label>
-                                                </div>
+                                        <tr ng-repeat="ans in groupAnswers[id]">
+                                            <td class="fifteen wide" ng-class="{'cardBorder': $ctrl.focused, 'has-success-card':ftbForm.ftbQuestion.$valid, 'has-errorCard': submitted && (ftbForm.ftbQuestion.question.text.length == 0 || ftbForm.ftbQuestion.$error.pattern)}">
+                                                <js-tag js-tag-options="ans"></js-tag>
                                             </td>
-                                            <td>{{blank.seq}}.</td>
-                                            <td>
-                                                <js-tag js-tag-options="blankAnswers[blank.id]" ng-model="blank.answers"></js-tag>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot class="full-width">
+                                        <tr>
+                                            <th>
+                                                <div class="ui right floated small primary labeled icon button" ng-click="addAnswerToGroup(id)">
+                                                    <i class="plus icon"></i> Add answer
+                                                </div>
+                                            </th>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="two column row qHeader">
+                            <div class="column">Ungrouped Blanks</div>
+                            <div class="column"></div>
+                        </div>
+                        <div class="one column row" ng-if="getBlanksCount() > 0">
+                            <div class="column">
+                                <table class="ui table">
+                                    <tbody>
+                                        <tr ng-repeat="blank in getUngroupedBlanks()">
+                                            <td class="one wide">{{blank.seq}}.</td>
+                                            <td class="fifteen wide" ng-class="{'cardBorder': $ctrl.focused, 'has-success-card':ftbForm.ftbQuestion.$valid, 'has-errorCard': submitted && (ftbForm.ftbQuestion.question.text.length == 0 || ftbForm.ftbQuestion.$error.pattern)}">
+                                                <js-tag js-tag-options="blankAnswers[blank.id]"></js-tag>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -72,7 +100,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="ui segment instructions" style="display:none;">
+                    <div class="ui segment instructions" ng-if="0">
                         <ul>
                             <li>Use square brackets [[ ]] to indicate blanks in the sentence. The words between [[ ]] will
                                 appear as blanks to student.

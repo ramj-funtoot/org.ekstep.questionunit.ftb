@@ -39,13 +39,20 @@ FTBController.getQuestionTemplate = function () {
 
 FTBController.answerTemplate = function () {
   return '<% if(ansFieldConfig.keyboardType != "undefined" && (ansFieldConfig.keyboardType == "English" || ansFieldConfig.keyboardType == "Custom")) %> \
-    <input type="text" class="ans-field" id="ans-field<%= ansFieldConfig.index %>" readonly style="cursor: pointer;" style="cursor: pointer; width:<%= ansFieldConfig.fieldWidth %>px; " onclick="FTBController.logTelemetryInteract(event);">\
+    <input type="text" class="ans-field" id="ans-field<%= ansFieldConfig.index %>" style="cursor: pointer; width:<%= ansFieldConfig.fieldWidth %>px;" onclick="FTBController.logTelemetryInteract(event);" readonly>\
     <span id="ans-field<%= ansFieldConfig.index %>-temp" style="display:none;"><%= ansFieldConfig.answer %></span>\
   <% else %> \
-    <input type="text" class="ans-field" style="cursor: pointer; width:<%= ansFieldConfig.fieldWidth %>px; " id="ans-field<%= ansFieldConfig.index %>" onclick="FTBController.logTelemetryInteract(event);">\
+    <input type="text" class="ans-field" id="ans-field<%= ansFieldConfig.index %>" style="cursor: pointer; width:<%= ansFieldConfig.fieldWidth %>px;" onclick="FTBController.logTelemetryInteract(event);">\
     <span id="ans-field<%= ansFieldConfig.index %>-temp" style="display:none;"><%= ansFieldConfig.answer %></span>';
 }
 
+FTBController.blankTemplate = function () {
+  return '<% if(config.keyboardType != "undefined" && (config.keyboardType == "English" || config.keyboardType == "Custom")) %> \
+    <input type="text" class="ans-field" id="<%= config.id %>" style="cursor: pointer; width:<%= config.fieldWidth %>px;" onclick="FTBController.logTelemetryInteract(event);" readonly>\
+  <% else %> \
+    <input type="text" class="ans-field" id="<%= config.id %>" style="cursor: pointer; width:<%= config.fieldWidth %>px;" onclick="FTBController.logTelemetryInteract(event);">\
+  <span id="<%= config.id %>-temp" style="display:none;"><%= config.answer %></span>'
+}
 
 /**
  * renderer:questionunit.ftb:set state in the text box.
@@ -122,43 +129,38 @@ FTBController.showImageModel = function () {
    * @memberof org.ekstep.questionunit.ftb
    */
   FTBController.generateHTML = function (quesData) {
-    var index = 0,
-      template, ansTemplate;
+    var template;
     // Add parsedQuestion to the currentQuesData
-    quesData.question.text = quesData.question.text.replace(/\[\[.*?\]\]/g, function (a, b) { // eslint-disable-line no-unused-vars
-      index = index + 1;
-      template = _.template(FTBController.answerTemplate()); // eslint-disable-line no-undef
-      var ansFieldConfig = {
-        "index": index,
-        "answer": quesData.answer[index - 1],
-        "keyboardType": quesData.question.keyboardConfig.keyboardType,
-        "fieldWidth": quesData.answer[index - 1].length * 15
-      };
-      ansTemplate = template({
-        ansFieldConfig: ansFieldConfig
+    quesData.data = quesData.data || {};
+    quesData.data.blanks = quesData.data.blanks || {};
+    var id = 0;
+    while (/\[\[.*?\]\]/g.test(quesData.question.text)) {
+      quesData.question.text = quesData.question.text.replace(/\[\[.*?\]\]/, function (a, b) { // eslint-disable-line no-unused-vars
+        var blankId = "b" + id;
+        quesData.data.blanks[blankId] = { "id": blankId, "seq": "" + id + 1, answers: [quesData.answer[id]] };
+        template = _.template(FTBController.blankTemplate()); // eslint-disable-line no-undef
+        var blankConfig = {
+          "id": blankId,
+          "keyboardType": quesData.question.keyboardConfig.keyboardType
+        };
+        return template({ config: blankConfig })
       });
-      return ansTemplate;
-    });
+      id = id + 1;
+    }
 
     var e = $('<div></div>');
     e.html(quesData.question.text);
-    var blankElts = $('.ftb-blank', e);
-    _.each(blankElts, function (be, i) {
-      quesData.question.text = quesData.question.text.replace(be.outerHTML, function (a, b) { // eslint-disable-line no-unused-vars
-        index = index + 1;
-        var answers = quesData.data.blanks[$(a)[0].id].answers;
-        template = _.template(FTBController.answerTemplate()); // eslint-disable-line no-undef
-        var ansFieldConfig = {
-          "index": index,
-          "answer": answers[0],
-          "keyboardType": quesData.question.keyboardConfig.keyboardType,
-          "fieldWidth": _.max(_.map(answers, function (a) { return a.length; })) * 15
-        };
-        ansTemplate = template({
-          ansFieldConfig: ansFieldConfig
-        });
-        return ansTemplate;
+    var blanks = $('.ftb-blank', e)
+    _.each(blanks, function (b, index) {
+      template = _.template(FTBController.blankTemplate()); // eslint-disable-line no-undef
+      var blankConfig = {
+        "id": b.id,
+        "keyboardType": quesData.question.keyboardConfig.keyboardType
+      };
+      bTemplate = template({
+        config: blankConfig
       });
+      quesData.question.text = quesData.question.text.replace(b.outerHTML, bTemplate);
     });
     return quesData;
   };

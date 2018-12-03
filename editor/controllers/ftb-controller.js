@@ -30,6 +30,9 @@ angular.module('ftbApp', ['org.ekstep.question', 'jsTag']).controller('ftbQuesti
     answer: [],
     media: []
   };
+  $scope.config = {
+    auto_migrate: true
+  }
   questionInput = CKEDITOR.replace('ftbQuestion', { // eslint-disable-line no-undef
     extraPlugins: 'notification,font,justify,colorbutton,mathtext,wordcount,pastefromword,clipboard,ftbblank',
     extraAllowedContent: 'div span',
@@ -39,7 +42,7 @@ angular.module('ftbApp', ['org.ekstep.question', 'jsTag']).controller('ftbQuesti
   });
   questionInput.on('change', function () {
     $scope.ftbFormData.question.text = this.getData();
-    if (isMigrationNeeded($scope.ftbFormData.question.text)) {
+    if ($scope.config.auto_migrate && isMigrationNeeded($scope.ftbFormData.question.text)) {
       $timeout(function () {
         $scope.ftbFormData.question.text = migrateQuestion($scope.ftbFormData.question.text);
         questionInput.setData($scope.ftbFormData.question.text);
@@ -125,18 +128,22 @@ angular.module('ftbApp', ['org.ekstep.question', 'jsTag']).controller('ftbQuesti
       var index = _.max(_.map(getFtbBlanks(question), function (b, i) {
         return parseInt(b.innerText || b.textContent);
       })) || 0;
-      question = question.replace(/\[\[(.*?)\]\]/g, function (a, b) { // eslint-disable-line no-unused-vars
-        var id = "b" + index;
-        $scope.ftbFormData.data.blanks[id] = $scope.ftbFormData.data.blanks[id] || {
-          "id": id,
-          "seq": "" + (index + 1),
-          answers: [b]
-        }
-        $scope.blankAnswers[id] = $scope.blankAnswers[id] || angular.extend({}, {
-          "tags": new JSTagsCollection([b])
-        }, $scope.jsTagOptions);
-        return '<span class="ftb-blank" contenteditable="false" id="' + id + '">' + (index + 1) + '</span>'
-      });
+      // replace one by one (by not specifying /g option in the regex)
+      while (/\[\[.*?\]\]/g.test(question)) {
+        question = question.replace(/\[\[(.*?)\]\]/, function (a, b) { // eslint-disable-line no-unused-vars
+          var id = "b" + index;
+          $scope.ftbFormData.data.blanks[id] = $scope.ftbFormData.data.blanks[id] || {
+            "id": id,
+            "seq": "" + (index + 1),
+            answers: [b]
+          }
+          $scope.blankAnswers[id] = $scope.blankAnswers[id] || angular.extend({}, {
+            "tags": new JSTagsCollection([b])
+          }, $scope.jsTagOptions);
+          return '<span class="ftb-blank" contenteditable="false" id="' + id + '">' + (index + 1) + '</span>'
+        });
+        index++;
+      }
     }
     return question;
   }
@@ -167,9 +174,19 @@ angular.module('ftbApp', ['org.ekstep.question', 'jsTag']).controller('ftbQuesti
       return a.toLowerCase().trim();
     });
     if ($scope.ftbFormData.data && $scope.ftbFormData.data.blanks) {
-      _.each($scope.ftbFormData.data.blanks, function (v, k) {
-        v.answers = _.map($scope.blankAnswers[k].tags.tags, function (t) {
-          return t.value;
+      _.each($scope.ftbFormData.data.blanks, function (blank, k) {
+        if (!blank.group)
+          blank.answers = _.map($scope.blankAnswers[k].tags.tags, function (t) {
+            return t.value;
+          });
+      });
+    }
+    if ($scope.ftbFormData.data && $scope.ftbFormData.data.groups) {
+      _.each($scope.ftbFormData.data.groups, function (group, k) {
+        group.answers = _.map($scope.groupAnswers[k], function (a) {
+          return _.map(a.tags.tags, function (t) {
+            return t.value;
+          });
         });
       });
     }
@@ -316,9 +333,12 @@ angular.module('ftbApp', ['org.ekstep.question', 'jsTag']).controller('ftbQuesti
             "seq": (b.textContent || b.innerText).trim(),
             answers: []
           }
-          $scope.blankAnswers[b.id] = $scope.blankAnswers[b.id] || angular.extend({}, {
-            "tags": new JSTagsCollection([])
-          }, $scope.jsTagOptions)
+          // if the blank is already part of the group, don't create the JStagcollection
+          if (!$scope.ftbFormData.data.blanks[b.id].group) {
+            $scope.blankAnswers[b.id] = $scope.blankAnswers[b.id] || angular.extend({}, {
+              "tags": new JSTagsCollection([])
+            }, $scope.jsTagOptions)
+          }
         });
       }
       // if there are any objects that are extra, then remove them
@@ -333,7 +353,8 @@ angular.module('ftbApp', ['org.ekstep.question', 'jsTag']).controller('ftbQuesti
         })
         _.each(missingBlanks, function (mb, i) {
           delete $scope.ftbFormData.data.blanks[mb];
-          delete $scope.blankAnswers[mb];
+          if ($scope.blankAnswers[mb])
+            delete $scope.blankAnswers[mb];
         });
       }
     }
@@ -343,5 +364,103 @@ angular.module('ftbApp', ['org.ekstep.question', 'jsTag']).controller('ftbQuesti
       "inputPlaceHolder": "Type answer here"
     }
   };
+
+  var ungroupBlanks = function (grpId) {
+    // obtain all the blanks that are part of this group
+    var grpBlanks = $scope.getBlanksInGroup(grpId);
+    var gIndex = 0;
+    $scope.blankAnswers = $scope.blankAnswers || {};
+    _.each(grpBlanks, function (blank, id) {
+      var answers = _.map($scope.groupAnswers[grpId][gIndex].tags.tags, function (t) {
+        return t.value;
+      });
+      $scope.blankAnswers[id] = $scope.blankAnswers[id] || angular.extend({}, {
+        "tags": new JSTagsCollection(answers)
+      }, $scope.jsTagOptions);
+      $scope.ftbFormData.data.blanks[id].answers = [];
+      delete $scope.ftbFormData.data.blanks[id].group;
+      gIndex++;
+    });
+  }
+
+  var getNewGroupId = function () {
+    return "" + ($scope.getGroupsCount() + 1);
+  }
+
+  var groupBlanks = function (blankIds, grpId) {
+    grpId = grpId || getNewGroupId();
+    $scope.ftbFormData.data.groups = $scope.ftbFormData.data.groups || {};
+    $scope.ftbFormData.data.groups[grpId] = { answers: [] }
+    $scope.groupAnswers = $scope.groupAnswers || {};
+    $scope.groupAnswers[grpId] = [];
+    $scope.groupAnswers[grpId] = _.map(blankIds, function (bId) {
+      var answers = _.map($scope.blankAnswers[bId].tags.tags, function (t) {
+        return t.value;
+      });
+      return angular.extend({}, {
+        "tags": new JSTagsCollection(answers)
+      }, $scope.jsTagOptions);
+    })
+    _.each(blankIds, function (bId) {
+      $scope.ftbFormData.data.blanks[bId].group = grpId;
+      delete $scope.ftbFormData.data.blanks[bId].answers;
+      delete $scope.blankAnswers[bId];
+    });
+  }
+
+  $scope.toggleGroupAll = function () {
+    if ($scope.ftbFormData.data.groups && Object.keys($scope.ftbFormData.data.groups).length > 0) {
+      // ungroup - restore the answers from the group to the blanks
+      _.each($scope.ftbFormData.data.groups, function (grp, key) {
+        ungroupBlanks(key);
+      })
+      delete $scope.ftbFormData.data.groups;
+    }
+    else {
+      // form group - right now only one group is supported, that has all the blanks.
+      groupBlanks(Object.keys($scope.ftbFormData.data.blanks));
+      delete $scope.blankAnswers;
+    }
+  }
+
+  $scope.allowGroups = function () {
+    return ($scope.ftbFormData.data.blanks && Object.keys($scope.ftbFormData.data.blanks).length > 1);
+  }
+
+  $scope.getBlanksCount = function () {
+    if ($scope.ftbFormData.data && $scope.ftbFormData.data.blanks)
+      return Object.keys($scope.ftbFormData.data.blanks).length;
+    return 0;
+  }
+
+  $scope.getGroupsCount = function () {
+    if ($scope.ftbFormData.data && $scope.ftbFormData.data.groups)
+      return Object.keys($scope.ftbFormData.data.groups).length;
+    return 0;
+  }
+
+  $scope.getUngroupedBlanks = function () {
+    var ungrouped = {};
+    _.each($scope.ftbFormData.data.blanks, function (blank, key) {
+      if (!blank.group)
+        ungrouped[key] = blank;
+    });
+    return ungrouped;
+  }
+
+  $scope.getBlanksInGroup = function (grpId) {
+    var grpBlanks = {};
+    _.each($scope.ftbFormData.data.blanks, function (blank, key) {
+      if (blank.group == grpId)
+        grpBlanks[key] = blank;
+    });
+    return grpBlanks;
+  }
+
+  $scope.addAnswerToGroup = function (grpId) {
+    $scope.groupAnswers[grpId].push(angular.extend({}, {
+      "tags": new JSTagsCollection([])
+    }, $scope.jsTagOptions));
+  }
 }]);
 //# sourceURL=horizontalFTB.js
