@@ -8,7 +8,7 @@
                     </div>
                     <div class="outer-segment">
                         <div class="ui segments inner-segment" ng-class="{'cardBorder': $ctrl.focused, 'has-success-card':ftbForm.ftbQuestion.$valid, 'has-errorCard': submitted && (ftbForm.ftbQuestion.question.text.length == 0 || ftbForm.ftbQuestion.$error.pattern)}">
-                            <div class="ui segment">
+                            <div class="">
                                 <div class="ui grid">
                                     <div class="twelve wide column">
                                         <div class="form-group segment textBoxDiv questionTextBox">
@@ -41,17 +41,20 @@
                             </div>
                         </div>
                     </div>
+                    <div class="one column row fib-help-text">
+                        <span>Use the shortcut <b>shift+space</b> or click on the <b>Insert blank</b> button to add a blank.</span>
+                    </div>
                     <div class="ui grid" ng-if="getBlanksCount() > 0">
                         <div class="two column row qHeader">
-                            <div class="column">Enter expected answers</div>
-                            <div class="column right floated right aligned" ng-if="allowGroups()">
+                            <div class="column">Enter correct answers</div>
+                            <!-- <div class="column right floated right aligned" ng-if="allowGroups()">
                                 <button class="ui labeled icon button" ng-click="toggleGroupAll()">
                                     <i ng-class="{'object group outline icon': !ftbFormData.data.groups, 'object ungroup outline icon': ftbFormData.data.groups}"></i>
                                     {{ftbFormData.data.groups ? 'Ungroup': 'Group'}}
                                 </button>
-                            </div>
+                            </div> -->
                         </div>
-                        <div class="one column row" ng-if="getGroupsCount() > 0">
+                        <!-- <div class="one column row" ng-if="getGroupsCount() > 0">
                             <div class="column">
                                 <table class="ui table" ng-repeat="(id, group) in ftbFormData.data.groups">
                                     <thead class="full-width">
@@ -59,6 +62,9 @@
                                             <th>
                                                 Group {{id}}
                                                 <span class="ui blue label" ng-repeat="blank in getBlanksInGroup(id)">{{blank.seq}}</span>
+                                                <div class="ui right floated small primary labeled icon button" ng-click="ungroupBlanks(id)">
+                                                    <i class="object ungroup outline icon"></i> Ungroup
+                                                </div>
                                             </th>
                                         </tr>
                                     </thead>
@@ -80,22 +86,43 @@
                                     </tfoot>
                                 </table>
                             </div>
-                        </div>
-                        <div class="two column row qHeader">
-                            <div class="column">Ungrouped Blanks</div>
-                            <div class="column"></div>
-                        </div>
+                        </div> -->
                         <div class="one column row" ng-if="getBlanksCount() > 0">
                             <div class="column">
                                 <table class="ui table">
-                                    <tbody>
+                                    <thead class="full-width">
+                                        <tr>
+                                            <th colspan="2">
+                                                <div ng-if="allowGroups()" class="ui left floated icon button labeled compact" ng-click="groupAllUngroupedBlanks()">
+                                                    <i class="object group outline icon"></i>Group
+                                                </div>
+                                                <span ng-if="getGroupsCount() > 0" class="ftb-group-title">Group <span class="ui label"
+                                                        ng-repeat="blank in getBlanksInGroup(config.default_group)">{{blank.seq}}</span></span>
+                                                <div ng-if="getGroupsCount() > 0" class="ui left floated icon button labeled compact" ng-click="ungroupBlanks(config.default_group)">
+                                                    <i class="object ungroup outline icon"></i>Ungroup
+                                                </div>
+                                                <div ng-if="getGroupsCount() > 0" class="ui right floated icon button labeled compact" ng-click="addAnswerToGroup(config.default_group)">
+                                                    <i class="plus icon"></i>Add Answers
+                                                </div>
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody ng-if="getBlanksCount() > 0">
                                         <tr ng-repeat="blank in getUngroupedBlanks()">
-                                            <td class="one wide">{{blank.seq}}.</td>
+                                            <td class="one wide blank-seq-number">{{blank.seq}}</td>
                                             <td class="fifteen wide" ng-class="{'cardBorder': $ctrl.focused, 'has-success-card':ftbForm.ftbQuestion.$valid, 'has-errorCard': submitted && (ftbForm.ftbQuestion.question.text.length == 0 || ftbForm.ftbQuestion.$error.pattern)}">
                                                 <js-tag js-tag-options="blankAnswers[blank.id]"></js-tag>
                                             </td>
                                         </tr>
                                     </tbody>
+                                    <tbody ng-if="getGroupsCount() > 0">
+                                        <tr ng-repeat="ans in groupAnswers[config.default_group]">
+                                            <td class="fifteen wide" ng-class="{'cardBorder': $ctrl.focused, 'has-success-card':ftbForm.ftbQuestion.$valid, 'has-errorCard': submitted && (ftbForm.ftbQuestion.question.text.length == 0 || ftbForm.ftbQuestion.$error.pattern)}">
+                                                <js-tag js-tag-options="ans"></js-tag>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+
                                 </table>
                             </div>
                         </div>
